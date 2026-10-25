@@ -91,7 +91,8 @@ def test_identity_matches_the_running_service(tmp_path, monkeypatch) -> None:
 def test_each_configuration_is_stored_unchanged_by_the_service() -> None:
     properties = MalariaModelConfig.model_json_schema()["properties"]
     configurations = _entry()["configurations"]
-    assert set(configurations) == {"xgboost", "lightgbm", "auto"}
+    engines = {"xgboost": "xgboost", "lightgbm": "lightgbm", "best_of_both": "auto"}
+    assert set(configurations) == set(engines)
     for name, configuration in configurations.items():
         # Required by the official marketplace schema, dropped by chap-admin.
         periods = configuration["config"]["prediction_periods"]
@@ -106,7 +107,22 @@ def test_each_configuration_is_stored_unchanged_by_the_service() -> None:
         assert set(options) <= set(properties), name
         stored = MalariaModelConfig(**options).model_dump(mode="json")
         assert {key: stored[key] for key in options} == options, name
-        assert options["engine"] == name
+        assert options["engine"] == engines[name]
+
+
+def test_public_names_shown_in_the_modeling_app() -> None:
+    # ConfiguredModelDB.display_name in chap_core/database/model_templates_and_config_tables.py
+    # (v2.4.0): "<template display_name> [<stub with spaces, .capitalize()>]".
+    entry = _entry()
+    shown = sorted(
+        f"{entry['display_name']} [{stub.replace('_', ' ').capitalize()}]"
+        for stub in entry["configurations"]
+    )
+    assert shown == [
+        "Malaria Weekly Forecast (Gradient Boosting) [Best of both]",
+        "Malaria Weekly Forecast (Gradient Boosting) [Lightgbm]",
+        "Malaria Weekly Forecast (Gradient Boosting) [Xgboost]",
+    ]
 
 
 def test_committed_stable_pin_is_accepted_by_chap_admin() -> None:

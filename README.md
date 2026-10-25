@@ -5,11 +5,14 @@ A [chapkit](https://github.com/dhis2-chap/chapkit) model service for
 cases one, two and three weeks ahead. It exposes three models in the DHIS2
 Modeling App, all served by one container:
 
-| Configured model in CHAP            | What it does                                                                  |
-| ----------------------------------- | ----------------------------------------------------------------------------- |
-| `chap-malaria-forecasting:xgboost`  | XGBoost, `count:poisson`, one estimator per horizon                           |
-| `chap-malaria-forecasting:lightgbm` | LightGBM, `poisson`, one estimator per horizon                                |
-| `chap-malaria-forecasting:auto`     | Trains both, keeps the one with the lower out-of-sample MAE (or weights them) |
+| Shown in the Modeling App                                    | Configured model                        | What it does                                                 |
+| ------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------ |
+| Malaria Weekly Forecast (Gradient Boosting) [Xgboost]        | `chap-malaria-forecasting:xgboost`      | XGBoost, `count:poisson`, one estimator per horizon          |
+| Malaria Weekly Forecast (Gradient Boosting) [Lightgbm]       | `chap-malaria-forecasting:lightgbm`     | LightGBM, `poisson`, one estimator per horizon               |
+| Malaria Weekly Forecast (Gradient Boosting) [Best of both]   | `chap-malaria-forecasting:best_of_both` | Trains both, keeps the one with the lower out-of-sample MAE  |
+
+CHAP builds the displayed name as `<template> [<configuration>]` and lowercases
+all but the first letter of the configuration, hence "Xgboost".
 
 It was built for health-zone level surveillance in the DRC (514 zones), but
 nothing in it is country-specific: any CHAP deployment with weekly case data,
@@ -209,6 +212,7 @@ export CHAP_MARKETPLACE_URL=http://127.0.0.1:8765
 # 3. Only if CHAP sets CHAP_API_TOKEN (see "Authentication" below):
 #    chap-admin does not read .env, and the service needs a key to register
 # export CHAP_API_TOKEN="$(grep '^CHAP_API_TOKEN=' .env | cut -d= -f2-)"
+# sed -i '/^SERVICEKIT_REGISTRATION_KEY=$/d' .env   # drop an empty definition first
 # grep -q '^SERVICEKIT_REGISTRATION_KEY=' .env || echo 'SERVICEKIT_REGISTRATION_KEY=${CHAP_API_TOKEN}' >> .env
 
 # 4. Install. --compose-file lists the base files you deploy CHAP with, in

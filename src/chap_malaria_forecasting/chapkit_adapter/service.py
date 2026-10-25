@@ -64,7 +64,7 @@ log = structlog.get_logger()
 
 SERVICE_ID = "chap-malaria-forecasting"
 REPOSITORY_URL = HttpUrl("https://github.com/Ebed-meleck/chap-malaria-forecasting")
-MODEL_VERSION = "0.2.0"
+MODEL_VERSION = "0.2.1"
 DESCRIPTOR_VERSION = 2
 SUPPORTED_ENGINES = ("xgboost", "lightgbm")
 
@@ -577,11 +577,14 @@ def create_app() -> Any:
         db_path.parent.mkdir(parents=True, exist_ok=True)
     info = MLServiceInfo(
         id=SERVICE_ID,
-        display_name="Malaria XGBoost / LightGBM / Auto",
+        # CHAP shows "<display_name> [<Configuration>]" for each configured model.
+        display_name="Malaria Weekly Forecast (Gradient Boosting)",
         version=MODEL_VERSION,
         description=(
-            "Weekly direct multi-horizon malaria forecasts with explicit model selection, "
-            "traceable fallback and empirical out-of-sample residual samples."
+            "Forecasts weekly malaria cases 1 to 3 weeks ahead for each location, from past "
+            "cases, rainfall, temperature and population. Choose XGBoost, LightGBM, or Best "
+            "of both, which keeps whichever engine was more accurate on past data. "
+            "Uncertainty ranges come from past forecast errors and are not calibrated."
         ),
         model_metadata=ModelMetadata(
             author="HISP DRC engineering team",

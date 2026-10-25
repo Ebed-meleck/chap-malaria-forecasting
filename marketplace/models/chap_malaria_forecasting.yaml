@@ -4,7 +4,7 @@ schema_version: 2
 # service_id == MLServiceInfo.id reported by the running container.
 id: chap_malaria_forecasting
 service_id: chap-malaria-forecasting
-display_name: Malaria XGBoost / LightGBM / Auto
+display_name: Malaria Weekly Forecast (Gradient Boosting)
 kind: model
 
 # The author's own chapkit AssessedStatus, copied from the service.
@@ -65,29 +65,29 @@ versions:
     malaria forecasting (horizons 1-3).'
 
 # Each configuration becomes one configured model in CHAP, named
-# "chap-malaria-forecasting:<key>" and selectable in the DHIS2 Modeling App.
+# "chap-malaria-forecasting:<key>". The Modeling App lists it as
+# "<display_name> [<Key>]", with underscores as spaces and only the first
+# letter capitalised (e.g. "[Best of both]"), so keys are chosen to read well.
 # prediction_periods is required by the marketplace schema; chap-admin drops
 # it because CHAP sets the horizon for each run.
 configurations:
   xgboost:
     description: >-
-      XGBoost only (count:poisson, hist trees), service default
-      hyperparameters.
+      Gradient-boosted trees with XGBoost, one model per forecast week.
     config:
       prediction_periods: 3
       engine: xgboost
   lightgbm:
     description: >-
-      LightGBM only (poisson objective), service default hyperparameters.
+      Gradient-boosted trees with LightGBM, one model per forecast week.
     config:
       prediction_periods: 3
       engine: lightgbm
-  auto:
+  best_of_both:
     description: >-
-      Trains both engines and keeps the one with the lower historical
-      out-of-sample MAE, with hysteresis towards the XGBoost champion. Falls
-      back to the champion when backtest evidence is insufficient, and records
-      the decision with the forecast.
+      Trains XGBoost and LightGBM and keeps whichever forecast past weeks more
+      accurately. Keeps XGBoost when there is too little history to compare
+      them, and records the choice with each forecast.
     config:
       prediction_periods: 3
       engine: auto

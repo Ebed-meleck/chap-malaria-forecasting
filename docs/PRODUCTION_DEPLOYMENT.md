@@ -90,6 +90,7 @@ export CHAP_MARKETPLACE_URL=http://127.0.0.1:8765
 # une clé à POST /v2/services/$register (sinon 401, service jamais enregistré, rollback).
 # Voir README, section « Authentication ». Correctif rapide sans redémarrer CHAP :
 # export CHAP_API_TOKEN="$(grep '^CHAP_API_TOKEN=' .env | cut -d= -f2-)"
+# sed -i '/^SERVICEKIT_REGISTRATION_KEY=$/d' .env   # drop an empty definition first
 # grep -q '^SERVICEKIT_REGISTRATION_KEY=' .env || echo 'SERVICEKIT_REGISTRATION_KEY=${CHAP_API_TOKEN}' >> .env
 
 chap-admin install chap_malaria_forecasting \
@@ -173,7 +174,7 @@ curl -fsS "${AUTH[@]}" "$CHAP/v1/crud/configured-models" | jq -r '.[].name' | gr
 ```
 
 Attendu : service présent, template `healthStatus: live`, trois configured models
-`chap-malaria-forecasting:{xgboost,lightgbm,auto}`. Puis, dans DHIS2 Modeling App :
+`chap-malaria-forecasting:{xgboost,lightgbm,best_of_both}`. Puis, dans DHIS2 Modeling App :
 rafraîchir la liste, vérifier les trois modèles et lancer un petit backtest pour chacun. Les
 logs du service doivent contenir `malaria_models_trained` puis `malaria_predictions_created`
 avec le moteur sélectionné et `used_fallback`.
