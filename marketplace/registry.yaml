@@ -1,0 +1,6 @@
+# CHAP model-marketplace registry (schema v2), the format `chap-admin` reads.
+# Serve this directory over HTTP and point CHAP_MARKETPLACE_URL at it; see
+# README.md "Deploy with chap-admin".
+schema_version: 2
+models:
+  - models/chap_malaria_forecasting.yaml

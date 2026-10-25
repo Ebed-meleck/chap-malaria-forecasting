@@ -1,0 +1,66 @@
+# Manual Compose overlay for a CHAP Core deployment, following the chapkit
+# "Deploying to chap-core" convention. It is the alternative to
+# `chap-admin install`: use one or the other, never both, because both
+# register the service id `chap-malaria-forecasting`.
+#
+# Copy this file next to chap-core's compose file, set MALARIA_FORECASTING_IMAGE
+# in the same .env, then:
+#   docker compose -f compose.yml -f compose.chap-malaria-forecasting.yml \
+#     up -d --no-deps chap-malaria-forecasting
+# (use compose.ghcr.yml, plus any local overlays, instead of compose.yml when
+# CHAP runs from the GHCR images).
+services:
+  chap-malaria-forecasting:
+    image: "${MALARIA_FORECASTING_IMAGE:?set to ghcr.io/<owner>/chap-malaria-forecasting:sha-<commit> or @sha256:<digest>}"
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 90s
+    # Same posture as chap and worker: unprivileged user, read-only root
+    # filesystem, writable only at /work/data (SQLite) and /tmp (workspaces).
+    user: chapkit:chapkit
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: ${MALARIA_FORECASTING_PIDS:-512}
+    cpus: "${MALARIA_FORECASTING_CPUS:-4.0}"
+    mem_limit: "${MALARIA_FORECASTING_MEMORY:-16g}"
+    environment:
+      SERVICEKIT_ORCHESTRATOR_URL: http://chap:8000/v2/services/$$register
+      # Empty unless chap-core also sets it; then both must hold the same value.
+      SERVICEKIT_REGISTRATION_KEY: ${SERVICEKIT_REGISTRATION_KEY:-}
+      SERVICEKIT_HOST: chap-malaria-forecasting
+      DATABASE_URL: sqlite+aiosqlite:////work/data/chapkit.db
+      CHAPKIT_TEMP_DIR: /tmp/chapkit
+      # Keep numerical libraries from multiplying threads independently.
+      OMP_NUM_THREADS: "${MALARIA_FORECASTING_THREADS:-4}"
+      OPENBLAS_NUM_THREADS: "${MALARIA_FORECASTING_THREADS:-4}"
+      MKL_NUM_THREADS: "${MALARIA_FORECASTING_THREADS:-4}"
+      MALLOC_ARENA_MAX: "2"
+    volumes:
+      - chap-malaria-forecasting-data:/work/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=2g,mode=1777
+    # No `networks:` key: the service joins the project's default network, as
+    # chap-core's own model services do. Postgres and Valkey sit on the
+    # `backend` network and stay unreachable from here.
+    # No `ports:` either: chap reaches the service by its DNS name. For local
+    # debugging only, add: ports: ["127.0.0.1:5010:8000"]
+    healthcheck:
+      test: ["CMD", "python", "/usr/local/lib/chap-malaria-healthcheck.py"]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "${MALARIA_FORECASTING_LOG_MAX_SIZE:-20m}"
+        max-file: "${MALARIA_FORECASTING_LOG_MAX_FILES:-5}"
+    depends_on:
+      chap:
+        condition: service_healthy
+
+volumes:
+  chap-malaria-forecasting-data: {}

@@ -1,0 +1,54 @@
+# Python / uv
+.venv/
+.uv-cache/
+__pycache__/
+*.py[cod]
+*.so
+*.dylib
+*.egg-info/
+
+# Quality and test output
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.hypothesis/
+
+# Builds, models, data, and local benchmarks
+build/
+dist/
+artifacts/
+data/
+backups/
+benchmark-results/
+*.joblib
+*.pkl
+*.pickle
+*.onnx
+
+# Secrets and local deployment configuration
+.env
+.env.*
+!.env.example
+deploy/*.env
+deploy/secrets/
+*.pem
+*.key
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*~
+
+# Logs
+*.log
+
+#claude
+.claude/
+#ia
+prompt.md
+WORKLOG.md

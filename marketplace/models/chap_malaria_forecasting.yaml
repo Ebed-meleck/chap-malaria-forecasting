@@ -1,0 +1,85 @@
+schema_version: 2
+
+# `chap-admin` requires id == service_id with "-" replaced by "_", and
+# service_id == MLServiceInfo.id reported by the running container.
+id: chap_malaria_forecasting
+service_id: chap-malaria-forecasting
+display_name: Malaria XGBoost / LightGBM / Auto
+kind: model
+
+# The author's own chapkit AssessedStatus, copied from the service.
+assessed_status: orange
+
+summary: >-
+  Weekly malaria case forecasts for horizons of one to three weeks, using one
+  directly trained gradient-boosting estimator per horizon (XGBoost or
+  LightGBM, Poisson objective) on strictly causal per-location case and
+  climate features. The auto configuration selects or weights the engines
+  from rolling-origin out-of-sample scores only. Samples come from empirical
+  out-of-sample residuals and are not claimed to be calibrated.
+
+developed_for: >-
+  Weekly malaria surveillance at health-zone level in the Democratic Republic
+  of the Congo (514 zones). Tested end to end on synthetic data only; not yet
+  validated on real surveillance data.
+
+source:
+  repository: https://github.com/Ebed-meleck/chap-malaria-forecasting
+  # Registry paths must be lowercase: chap-admin and the marketplace validator
+  # reject uppercase, and GHCR publishes ghcr.io/ebed-meleck/... anyway.
+  image: ghcr.io/ebed-meleck/chap-malaria-forecasting
+  runtime_image: ghcr.io/dhis2-chap/chapkit-py
+
+# Copied from MLServiceInfo.model_metadata (a test keeps them equal).
+attribution:
+  author: HISP DRC engineering team
+  organization: HISP DRC
+
+maintainers:
+  [{ name: "Ebed Meleck Makoso", email: "ebedmeleckmakoso@gmail.com" }]
+
+compatibility:
+  period_types: [weekly]
+  min_prediction_periods: 1
+  max_prediction_periods: 3
+  requires_geo: false
+
+covariates:
+  required: [rainfall, mean_temperature, population]
+  defaults: []
+  allow_free_additional: false
+
+# Filled by deploy/pin_release.py once CI has published the image and the
+# acceptance tests in docs/PRODUCTION_DEPLOYMENT.md have passed. Until then
+# `chap-admin install` refuses the entry ("no verified stable version").
+channels: {}
+versions: []
+
+# Each configuration becomes one configured model in CHAP, named
+# "chap-malaria-forecasting:<key>" and selectable in the DHIS2 Modeling App.
+# prediction_periods is required by the marketplace schema; chap-admin drops
+# it because CHAP sets the horizon for each run.
+configurations:
+  xgboost:
+    description: >-
+      XGBoost only (count:poisson, hist trees), service default
+      hyperparameters.
+    config:
+      prediction_periods: 3
+      engine: xgboost
+  lightgbm:
+    description: >-
+      LightGBM only (poisson objective), service default hyperparameters.
+    config:
+      prediction_periods: 3
+      engine: lightgbm
+  auto:
+    description: >-
+      Trains both engines and keeps the one with the lower historical
+      out-of-sample MAE, with hysteresis towards the XGBoost champion. Falls
+      back to the champion when backtest evidence is insufficient, and records
+      the decision with the forecast.
+    config:
+      prediction_periods: 3
+      engine: auto
+      auto_mode: select
