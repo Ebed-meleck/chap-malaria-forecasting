@@ -18,6 +18,12 @@ LABEL org.opencontainers.image.title="CHAP malaria forecasting service" \
 USER root
 WORKDIR /work
 
+# LightGBM wheels link against the system OpenMP runtime (libgomp.so.1), which
+# the slim chapkit-py base does not ship; XGBoost vendors its own copy.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # The base image provides Python 3.13 and uv. The lockfile remains the sole
 # dependency resolution source; production builds intentionally exclude dev deps.
 COPY pyproject.toml uv.lock README.md LICENSE ./

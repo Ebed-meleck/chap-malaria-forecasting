@@ -95,8 +95,10 @@ jobs:
             type=sha,prefix=sha-
             type=sha,format=long,prefix=sha-
             type=ref,event=tag
+          # GitHub's license detection reports "AGPL-3.0"; keep the exact SPDX id.
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
 
       - name: Build the candidate image for Linux AMD64
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
@@ -118,33 +120,49 @@ jobs:
           set -euo pipefail
           image_user="$(docker image inspect chap-malaria-forecasting:ci --format '{{.Config.User}}')"
           test "${image_user}" = "chapkit:chapkit"
-          smoke_id="$(docker run --detach --rm \
+          # A new named volume is populated from the image's /work/data, which
+          # keeps its chapkit ownership, exactly as Compose and chap-admin mount
+          # it. A tmpfs would be root-owned and unwritable for the service user.
+          docker volume create chap-malaria-smoke-data >/dev/null
+          # No --rm: a container that exits early must stay inspectable.
+          smoke_id="$(docker run --detach \
             --name chap-malaria-smoke \
             --platform linux/amd64 \
             --network none \
             --read-only \
             --cap-drop ALL \
             --security-opt no-new-privileges \
-            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777 \
-            --tmpfs /work/data:rw,noexec,nosuid,nodev,size=256m,mode=0750 \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777 \
+            --mount type=volume,src=chap-malaria-smoke-data,dst=/work/data \
             --env DATABASE_URL=sqlite+aiosqlite:////work/data/chapkit.db \
             --env CHAPKIT_TEMP_DIR=/tmp/chapkit \
             chap-malaria-forecasting:ci)"
           cleanup() {
             docker logs "${smoke_id}" || true
             docker rm --force "${smoke_id}" >/dev/null 2>&1 || true
+            docker volume rm chap-malaria-smoke-data >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
+          healthy=false
           for attempt in $(seq 1 30); do
             if docker exec "${smoke_id}" python /usr/local/lib/chap-malaria-healthcheck.py; then
-              exit 0
+              healthy=true
+              break
             fi
             if ! docker inspect "${smoke_id}" --format '{{.State.Running}}' | grep -qx true; then
+              echo "container exited with code $(docker inspect "${smoke_id}" --format '{{.State.ExitCode}}')" >&2
               exit 1
             fi
             sleep 2
           done
-          exit 1
+          "${healthy}"
+          # Train and predict with both engines inside the image: a healthy
+          # /health does not prove that native libraries (libgomp) load.
+          result="$(docker exec "${smoke_id}" chap-malaria-benchmark \
+            --zones 10 --engine auto --through-service --n-estimators 10)"
+          echo "${result}"
+          # Application logs share stdout; the benchmark result is the last line.
+          echo "${result}" | tail -n 1 | python3 -c 'import json, sys; r = json.load(sys.stdin); assert r["predictions"] == 30 and not any(k.endswith("_training") for k in r["training_errors"]), r'
 
       - name: Log in to GHCR only after smoke success
         if: github.event_name != 'pull_request'
