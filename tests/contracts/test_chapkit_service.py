@@ -168,6 +168,23 @@ async def test_training_does_not_block_the_event_loop():
 
 
 @pytest.mark.asyncio
+async def test_predict_beyond_trained_horizon_asks_for_retraining():
+    history = _small_history(n_locations=2)
+    descriptor = await on_train(_small_config("xgboost"), DataFrame.from_pandas(history))
+    future = _future_from(history)
+    last = future.groupby("location").tail(1).copy()
+    last["time_period"] = last["time_period"].map(lambda period: add_iso_weeks(period, 1))
+
+    with pytest.raises(ValueError, match="trained for 3 week"):
+        await on_predict(
+            _small_config("xgboost"),
+            descriptor,
+            DataFrame.from_pandas(history),
+            DataFrame.from_pandas(pd.concat([future, last], ignore_index=True)),
+        )
+
+
+@pytest.mark.asyncio
 async def test_predict_rejects_descriptor_from_previous_format():
     history = DataFrame.from_pandas(_small_history())
     legacy = {"format_version": 1, "service_id": "chap-malaria-forecasting", "artifacts": {}}

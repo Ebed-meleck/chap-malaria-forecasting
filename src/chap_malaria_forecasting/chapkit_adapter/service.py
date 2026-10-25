@@ -43,6 +43,7 @@ from chap_malaria_forecasting.evaluation import (
     point_metrics,
 )
 from chap_malaria_forecasting.forecasting import (
+    DirectForecastConfig,
     DirectForecaster,
     HorizonResidualSampler,
     InsufficientResidualEvidence,
@@ -64,15 +65,18 @@ log = structlog.get_logger()
 
 SERVICE_ID = "chap-malaria-forecasting"
 REPOSITORY_URL = HttpUrl("https://github.com/Ebed-meleck/chap-malaria-forecasting")
-MODEL_VERSION = "0.2.1"
+MODEL_VERSION = "0.3.0"
 DESCRIPTOR_VERSION = 2
 SUPPORTED_ENGINES = ("xgboost", "lightgbm")
+# CHAP Core 2.4.0 asks for 12 periods on weekly data when a prediction does not
+# set its own horizon (db_worker_functions._get_n_periods).
+MAX_PREDICTION_PERIODS = 12
 
 
 class MalariaModelConfig(BaseConfig):
     """Options exposed as CHAP configured-model user options."""
 
-    prediction_periods: int = Field(default=3, ge=1, le=3)
+    prediction_periods: int = Field(default=3, ge=1, le=MAX_PREDICTION_PERIODS)
     engine: Literal["xgboost", "lightgbm", "auto"] = "auto"
     auto_mode: Literal["select", "ensemble", "champion_challenger"] = "select"
     champion: Literal["xgboost", "lightgbm"] = "xgboost"
@@ -106,6 +110,12 @@ def _engine_factory(config: MalariaModelConfig, engine: str) -> Callable[[], Any
     raise ValueError(f"unsupported engine: {engine!r}")
 
 
+def _horizons(config: MalariaModelConfig) -> tuple[int, ...]:
+    """Train only the horizons CHAP asked for (run_info.prediction_periods)."""
+
+    return tuple(range(1, config.prediction_periods + 1))
+
+
 def _backtest(
     config: MalariaModelConfig,
     history: pd.DataFrame,
@@ -114,12 +124,13 @@ def _backtest(
     evaluator = RollingOriginBacktester(
         BacktestConfig(
             n_splits=config.selection_backtest_splits,
-            horizon=3,
+            horizon=config.prediction_periods,
             min_train_weeks=config.selection_min_train_weeks,
         )
     )
     factory = _engine_factory(config, engine)
-    return evaluator.run(history, lambda: DirectForecaster(factory))
+    forecast_config = DirectForecastConfig(horizons=_horizons(config))
+    return evaluator.run(history, lambda: DirectForecaster(factory, forecast_config))
 
 
 def _historical_score(engine: str, result: pd.DataFrame) -> HistoricalScore:
@@ -293,7 +304,9 @@ def _train_sync(config: MalariaModelConfig, raw: pd.DataFrame) -> dict[str, Any]
             errors[f"{engine}_backtest"] = f"{type(exc).__name__}: {exc}"
             log.warning("model_backtest_failed", engine=engine, error=str(exc))
         try:
-            model = DirectForecaster(_engine_factory(config, engine)).fit(history)
+            model = DirectForecaster(
+                _engine_factory(config, engine), DirectForecastConfig(horizons=_horizons(config))
+            ).fit(history)
             models[engine] = pack_forecaster(model)
         except Exception as exc:
             errors[f"{engine}_training"] = f"{type(exc).__name__}: {exc}"
@@ -336,6 +349,7 @@ def _train_sync(config: MalariaModelConfig, raw: pd.DataFrame) -> dict[str, Any]
         "locations": int(history["location"].nunique()),
         "rows": len(history),
         "config": config.model_dump(mode="json"),
+        "horizons": list(_horizons(config)),
         "models": models,
         "selection": decision_json,
         "training_errors": errors,
@@ -388,6 +402,11 @@ def _validate_descriptor(model: Any) -> dict[str, Any]:
     return model
 
 
+def _trained_horizons(descriptor: dict[str, Any]) -> tuple[int, ...]:
+    # Descriptors written before 0.3.0 carry no "horizons" and were trained for 1-3.
+    return tuple(int(horizon) for horizon in descriptor.get("horizons", (1, 2, 3)))
+
+
 def _prediction_orchestrator(descriptor: dict[str, Any]) -> FallbackForecaster:
     loaded: dict[str, Any] = {}
     load_errors: dict[str, str] = {}
@@ -411,7 +430,9 @@ def _prediction_orchestrator(descriptor: dict[str, Any]) -> FallbackForecaster:
         primary = selected[0]
     alternatives = tuple(name for name in SUPPORTED_ENGINES if name != primary and name in loaded)
     if descriptor["config"].get("seasonal_fallback", True):
-        candidates["naive_seasonal"] = SeasonalNaiveForecaster()
+        candidates["naive_seasonal"] = SeasonalNaiveForecaster(
+            horizons=_trained_horizons(descriptor)
+        )
         alternatives = (*alternatives, "naive_seasonal")
     if primary not in candidates:
         log.error("primary_artifact_unavailable", primary=primary, errors=load_errors)
@@ -450,6 +471,13 @@ def _align_to_future(future: pd.DataFrame, predictions: pd.DataFrame) -> pd.Data
 def _predict_sync(model: Any, historic: pd.DataFrame, future: pd.DataFrame) -> pd.DataFrame:
     descriptor = _validate_descriptor(model)
     history = validate_history(historic)
+    trained = max(_trained_horizons(descriptor))
+    requested = int(future.groupby("location")["time_period"].nunique().max())
+    if requested > trained:
+        raise ValueError(
+            f"the model was trained for {trained} week(s) ahead but {requested} were requested; "
+            f"train again with prediction_periods >= {requested}"
+        )
     orchestrator = _prediction_orchestrator(descriptor)
     predictions = orchestrator.predict(history)
     used_fallback = bool(predictions["used_fallback"].any())
@@ -557,11 +585,12 @@ async def on_validate_predict(
             )
         )
     max_requested = normalized.groupby("location", observed=True)["time_period"].nunique().max()
-    if int(max_requested) > config.prediction_periods or int(max_requested) > 3:
+    if int(max_requested) > config.prediction_periods:
         diagnostics.append(
             _diagnostic_error(
                 "unsupported_forecast_horizon",
-                "future requests more periods than the configured maximum of three.",
+                f"future requests {int(max_requested)} periods; the configuration allows "
+                f"{config.prediction_periods} (service maximum {MAX_PREDICTION_PERIODS}).",
                 "future.time_period",
             )
         )
@@ -581,10 +610,11 @@ def create_app() -> Any:
         display_name="Malaria Weekly Forecast (Gradient Boosting)",
         version=MODEL_VERSION,
         description=(
-            "Forecasts weekly malaria cases 1 to 3 weeks ahead for each location, from past "
-            "cases, rainfall, temperature and population. Choose XGBoost, LightGBM, or Best "
-            "of both, which keeps whichever engine was more accurate on past data. "
-            "Uncertainty ranges come from past forecast errors and are not calibrated."
+            "Forecasts weekly malaria cases up to 12 weeks ahead for each location, from past "
+            "cases, rainfall, temperature and population; accuracy drops with distance, so "
+            "check backtests for the horizon you use. Choose XGBoost, LightGBM, or Best of "
+            "both, which keeps whichever engine was more accurate on past data. Uncertainty "
+            "ranges come from past forecast errors and are not calibrated."
         ),
         model_metadata=ModelMetadata(
             author="HISP DRC engineering team",
@@ -600,7 +630,7 @@ def create_app() -> Any:
         ),
         period_type=PeriodType.weekly,
         min_prediction_periods=1,
-        max_prediction_periods=3,
+        max_prediction_periods=MAX_PREDICTION_PERIODS,
         required_covariates=["rainfall", "mean_temperature", "population"],
         allow_free_additional_continuous_covariates=False,
         requires_geo=False,

@@ -47,7 +47,7 @@ def _future_frame(history: pd.DataFrame, horizons: int = 3) -> pd.DataFrame:
 
 
 def _run_through_service(
-    history: pd.DataFrame, engine: str, n_estimators: int, n_threads: int
+    history: pd.DataFrame, engine: str, n_estimators: int, n_threads: int, periods: int
 ) -> dict[str, object]:
     """Time the CHAPKit callbacks exactly as a CHAP train then predict job runs them."""
 
@@ -60,7 +60,12 @@ def _run_through_service(
     )
 
     config = MalariaModelConfig.model_validate(
-        {"engine": engine, "n_estimators": n_estimators, "n_threads": n_threads}
+        {
+            "engine": engine,
+            "n_estimators": n_estimators,
+            "n_threads": n_threads,
+            "prediction_periods": periods,
+        }
     )
     started = time.perf_counter()
     descriptor = asyncio.run(on_train(config, DataFrame.from_pandas(history)))
@@ -71,7 +76,7 @@ def _run_through_service(
             config,
             descriptor,
             DataFrame.from_pandas(history),
-            DataFrame.from_pandas(_future_frame(history)),
+            DataFrame.from_pandas(_future_frame(history, periods)),
         )
     ).to_pandas()
     return {
@@ -92,6 +97,7 @@ def run_benchmark(
     seed: int = 20261025,
     through_service: bool = False,
     n_threads: int = 1,
+    periods: int = 3,
 ) -> dict[str, object]:
     """Measure wall time and process maximum RSS for one required scale."""
 
@@ -109,7 +115,7 @@ def run_benchmark(
     if through_service:
         if engine == "features":
             raise ValueError("--through-service needs xgboost, lightgbm or auto")
-        service = _run_through_service(history, engine, n_estimators, n_threads)
+        service = _run_through_service(history, engine, n_estimators, n_threads, periods)
     elif engine == "auto":
         raise ValueError("engine auto is only available with --through-service")
     elif engine != "features":
@@ -140,6 +146,7 @@ def run_benchmark(
         "predictions": predictions,
         "through_service": through_service,
         "n_threads": n_threads if through_service else 1,
+        "periods": periods if through_service else 3,
         **service,
         "max_rss_mib": _max_rss_mib(),
         "max_rss_increase_mib": max(0.0, _max_rss_mib() - rss_before),
@@ -161,6 +168,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="run the CHAPKit on_train/on_predict callbacks, including selection backtests",
     )
     parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument(
+        "--periods", type=int, default=3, help="weeks ahead, with --through-service (1 to 12)"
+    )
     args = parser.parse_args(argv)
     print(
         json.dumps(
@@ -171,6 +181,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.seed,
                 args.through_service,
                 args.threads,
+                args.periods,
             ),
             sort_keys=True,
         )

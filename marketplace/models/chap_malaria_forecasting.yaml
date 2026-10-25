@@ -11,12 +11,13 @@ kind: model
 assessed_status: orange
 
 summary: >-
-  Weekly malaria case forecasts for horizons of one to three weeks, using one
-  directly trained gradient-boosting estimator per horizon (XGBoost or
-  LightGBM, Poisson objective) on strictly causal per-location case and
-  climate features. The auto configuration selects or weights the engines
-  from rolling-origin out-of-sample scores only. Samples come from empirical
-  out-of-sample residuals and are not claimed to be calibrated.
+  Weekly malaria case forecasts up to 12 weeks ahead (as many weeks as CHAP
+  requests), using one directly trained gradient-boosting estimator per
+  horizon (XGBoost or LightGBM, Poisson objective) on strictly causal
+  per-location case and climate features. The best_of_both configuration
+  selects the engine from rolling-origin out-of-sample scores only. Samples
+  come from empirical out-of-sample residuals and are not claimed to be
+  calibrated.
 
 developed_for: >-
   Weekly malaria surveillance at health-zone level in the Democratic Republic
@@ -41,7 +42,7 @@ maintainers:
 compatibility:
   period_types: [weekly]
   min_prediction_periods: 1
-  max_prediction_periods: 3
+  max_prediction_periods: 12
   requires_geo: false
 
 covariates:

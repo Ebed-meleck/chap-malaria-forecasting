@@ -2,8 +2,8 @@
 
 A [chapkit](https://github.com/dhis2-chap/chapkit) model service for
 [CHAP](https://github.com/dhis2-chap/chap-core) that forecasts weekly malaria
-cases one, two and three weeks ahead. It exposes three models in the DHIS2
-Modeling App, all served by one container:
+cases up to 12 weeks ahead (as many weeks as CHAP asks for). It exposes three
+models in the DHIS2 Modeling App, all served by one container:
 
 | Shown in the Modeling App                                    | Configured model                        | What it does                                                 |
 | ------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------ |
@@ -83,7 +83,7 @@ flowchart LR
 | chapkit        | 2.4.1 in the service (`>=2.4.1,<3`), servicekit 3.0.1         |
 | Python         | 3.13                                                          |
 | Image platform | `linux/amd64` (published by CI); arm64 works for local runs   |
-| Period type    | weekly; horizon 1 to 3 periods                                |
+| Period type    | weekly; horizon 1 to 12 periods                               |
 
 CHAP Core 2.4.0 itself depends on `chapkit>=2.1.0,<3` and reads prediction
 artifacts with chapkit 2.1.0. The wire format written by chapkit 2.4.1 is
@@ -141,7 +141,12 @@ in the Modeling App.
 | `minimum_residuals_per_horizon` | `20`       | residuals per horizon needed before samples are produced            |
 | `seasonal_fallback`             | `true`     | allow the seasonal naive model as last-resort fallback              |
 
-`prediction_periods` is set by CHAP for each run (1 to 3).
+`prediction_periods` is set by CHAP for each run (1 to 12) and the service
+trains exactly that many horizons: a backtest usually asks for 3, while a
+weekly prediction without an explicit horizon asks for 12 (CHAP's default).
+Training 12 horizons takes about four times longer than 3, and forecasts
+further ahead are less accurate; check the backtest for the horizon you use.
+A model trained for N weeks refuses a request for more than N.
 
 ## Run it locally
 
