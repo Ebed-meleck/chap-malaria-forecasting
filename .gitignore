@@ -17,13 +17,14 @@ coverage.xml
 htmlcov/
 .hypothesis/
 
-# Builds, models, data, and local benchmarks
-build/
-dist/
-artifacts/
-data/
-backups/
-benchmark-results/
+# Builds, models, data, and local benchmarks. Anchored with a leading "/" so
+# they never match the src/chap_malaria_forecasting/{data,artifacts} packages.
+/build/
+/dist/
+/artifacts/
+/data/
+/backups/
+/benchmark-results/
 *.joblib
 *.pkl
 *.pickle
