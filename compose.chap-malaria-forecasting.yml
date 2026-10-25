@@ -28,7 +28,8 @@ services:
     mem_limit: "${MALARIA_FORECASTING_MEMORY:-16g}"
     environment:
       SERVICEKIT_ORCHESTRATOR_URL: http://chap:8000/v2/services/$$register
-      # Empty unless chap-core also sets it; then both must hold the same value.
+      # Required when chap sets CHAP_API_TOKEN: either that token or the
+      # SERVICEKIT_REGISTRATION_KEY given to the chap container (README, "Authentication").
       SERVICEKIT_REGISTRATION_KEY: ${SERVICEKIT_REGISTRATION_KEY:-}
       SERVICEKIT_HOST: chap-malaria-forecasting
       DATABASE_URL: sqlite+aiosqlite:////work/data/chapkit.db

@@ -85,7 +85,12 @@ python3 -m http.server 8765 --bind 127.0.0.1 \
   --directory ~/chap-malaria-forecasting/marketplace &
 MARKETPLACE_PID=$!
 export CHAP_MARKETPLACE_URL=http://127.0.0.1:8765
-# export CHAP_API_TOKEN=...   # seulement si CHAP en définit un : chap-admin ne lit pas .env
+
+# Si CHAP_API_TOKEN est défini : chap-admin ne lit pas .env, et le service doit présenter
+# une clé à POST /v2/services/$register (sinon 401, service jamais enregistré, rollback).
+# Voir README, section « Authentication ». Correctif rapide sans redémarrer CHAP :
+# export CHAP_API_TOKEN="$(grep '^CHAP_API_TOKEN=' .env | cut -d= -f2-)"
+# grep -q '^SERVICEKIT_REGISTRATION_KEY=' .env || echo 'SERVICEKIT_REGISTRATION_KEY=${CHAP_API_TOKEN}' >> .env
 
 chap-admin install chap_malaria_forecasting \
   --compose-file compose.ghcr.yml --compose-file compose.worker.yml --accept-risk

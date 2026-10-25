@@ -206,8 +206,10 @@ python3 -m http.server 8765 --bind 127.0.0.1 \
 MARKETPLACE_PID=$!
 export CHAP_MARKETPLACE_URL=http://127.0.0.1:8765
 
-# 3. Only if CHAP sets CHAP_API_TOKEN: chap-admin does not read .env
-# export CHAP_API_TOKEN=...
+# 3. Only if CHAP sets CHAP_API_TOKEN (see "Authentication" below):
+#    chap-admin does not read .env, and the service needs a key to register
+# export CHAP_API_TOKEN="$(grep '^CHAP_API_TOKEN=' .env | cut -d= -f2-)"
+# grep -q '^SERVICEKIT_REGISTRATION_KEY=' .env || echo 'SERVICEKIT_REGISTRATION_KEY=${CHAP_API_TOKEN}' >> .env
 
 # 4. Install. --compose-file lists the base files you deploy CHAP with, in
 #    order (default: compose.yml). --accept-risk is required for any registry
@@ -243,6 +245,33 @@ the new container does not come up and register, `chap-admin` restores the
 previous one. To roll back a release that works but forecasts badly, set
 `channels.stable` back to the previous version in the entry and run `update`
 again; earlier template versions and their backtests stay in CHAP.
+
+### Authentication
+
+When CHAP sets `CHAP_API_TOKEN`, every route is protected, including the
+registration endpoint `POST /v2/services/$register`. A chapkit service can only
+send `X-Service-Key: $SERVICEKIT_REGISTRATION_KEY`, which CHAP 2.4.0 accepts
+when it equals either `CHAP_API_TOKEN` or a `SERVICEKIT_REGISTRATION_KEY` set
+**in the `chap` container** (`compose.ghcr.yml` does not pass one). Without it,
+registration gets 401 five times, the service never appears in `/v2/services`,
+and `chap-admin install` rolls back. Two ways to fix it:
+
+- **Quick, no CHAP restart:** add `SERVICEKIT_REGISTRATION_KEY=${CHAP_API_TOKEN}`
+  to `.env`. The model container then holds the full API token.
+- **Narrower:** generate a dedicated key (`openssl rand -hex 32`), put it in
+  `.env` as `SERVICEKIT_REGISTRATION_KEY`, pass it to the `chap` service in an
+  overlay (`environment: {SERVICEKIT_REGISTRATION_KEY: ${SERVICEKIT_REGISTRATION_KEY}}`)
+  and recreate `chap`. CHAP accepts that key on `/v2/services` only.
+
+Check which case you are in without registering anything (the empty body is
+rejected by validation, so nothing is stored):
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST 'http://localhost:8000/v2/services/$register' \
+  -H 'Content-Type: application/json' -d '{}'                        # 401: a key is required
+curl -s -o /dev/null -w '%{http_code}\n' -X POST 'http://localhost:8000/v2/services/$register' \
+  -H 'Content-Type: application/json' -H "X-Service-Key: $KEY" -d '{}' # 422: the key is accepted
+```
 
 ### B. With the Compose overlay
 

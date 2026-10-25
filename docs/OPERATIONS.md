@@ -115,7 +115,8 @@ logs, sinon le job échoue avec une erreur structurée.
 - Utilisateur `chapkit` non-root, rootfs en lecture seule, capabilities supprimées,
   `no-new-privileges`, `/tmp` en tmpfs.
 - L'API du service n'a pas d'authentification propre : l'isolation réseau est le contrôle.
-- `SERVICEKIT_REGISTRATION_KEY` n'est requise que si CHAP la définit; elle vit dans le `.env`
+- `SERVICEKIT_REGISTRATION_KEY` est requise dès que CHAP définit `CHAP_API_TOKEN` (égale au
+  token, ou clé dédiée transmise aussi au conteneur `chap`); elle vit dans le `.env`
   de CHAP (`chmod 600`). `deploy/start.sh` accepte aussi un secret monté en
   `/run/secrets/servicekit_registration_key`.
 - Ne jamais committer `.env`, clés, données DHIS2, bases SQLite réelles ou logs sensibles.
