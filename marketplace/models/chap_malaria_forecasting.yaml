@@ -52,8 +52,17 @@ covariates:
 # Filled by deploy/pin_release.py once CI has published the image and the
 # acceptance tests in docs/PRODUCTION_DEPLOYMENT.md have passed. Until then
 # `chap-admin install` refuses the entry ("no verified stable version").
-channels: {}
-versions: []
+channels:
+  stable: 0.2.0
+  latest: 0.2.0
+versions:
+- version: 0.2.0
+  commit: 68f5d33350afea89e32d819b98bdd0044fba8ae9
+  image_tag: sha-68f5d33
+  chapkit: '>=2.4.1,<3'
+  status: verified
+  changelog: 'First release: XGBoost, LightGBM and auto configurations for weekly
+    malaria forecasting (horizons 1-3).'
 
 # Each configuration becomes one configured model in CHAP, named
 # "chap-malaria-forecasting:<key>" and selectable in the DHIS2 Modeling App.

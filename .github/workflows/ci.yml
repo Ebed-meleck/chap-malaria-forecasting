@@ -193,5 +193,6 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           printf 'Published digest: `%s`\n' '${{ steps.publish.outputs.digest }}' >> "${GITHUB_STEP_SUMMARY}"
-          printf 'Production Compose must use `ghcr.io/%s@%s`.\n' '${{ github.repository }}' '${{ steps.publish.outputs.digest }}' >> "${GITHUB_STEP_SUMMARY}"
+          # Image references must be lowercase; GitHub keeps the owner's case.
+          printf 'Production Compose must use `ghcr.io/%s@%s`.\n' "${GITHUB_REPOSITORY,,}" '${{ steps.publish.outputs.digest }}' >> "${GITHUB_STEP_SUMMARY}"
           printf 'Marketplace pin: `uv run python deploy/pin_release.py --commit %s`\n' '${{ github.sha }}' >> "${GITHUB_STEP_SUMMARY}"

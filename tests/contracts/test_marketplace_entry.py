@@ -109,16 +109,36 @@ def test_each_configuration_is_stored_unchanged_by_the_service() -> None:
         assert options["engine"] == name
 
 
-def test_unpinned_entry_is_refused_by_chap_admin() -> None:
+def test_committed_stable_pin_is_accepted_by_chap_admin() -> None:
+    entry = _entry()
+    image = _stable_pin(entry)
+    stable = next(v for v in entry["versions"] if v["version"] == entry["channels"]["stable"])
+    assert image == f"{entry['source']['image']}:sha-{stable['commit'][:7]}"
+    assert re.fullmatch(r"[0-9a-f]{40}", stable["commit"])
+    assert entry["channels"]["latest"] in {v["version"] for v in entry["versions"]}
+
+
+def _unpinned_copy(tmp_path: Path, pin_release: Any) -> Path:
+    target = tmp_path / "entry.yaml"
+    shutil.copy(MARKETPLACE / "models" / "chap_malaria_forecasting.yaml", target)
+    text = pin_release._replace_sections(
+        target.read_text(encoding="utf-8"),
+        {"channels": "channels: {}\n", "versions": "versions: []\n"},
+    )
+    target.write_text(text, encoding="utf-8")
+    return target
+
+
+def test_unpinned_entry_is_refused_by_chap_admin(tmp_path) -> None:
+    target = _unpinned_copy(tmp_path, _pin_module())
     with pytest.raises(ValueError, match="no verified stable version"):
-        _stable_pin(_entry())
+        _stable_pin(_entry(target))
 
 
 def test_pin_release_produces_a_pin_chap_admin_accepts(tmp_path) -> None:
-    target = tmp_path / "entry.yaml"
-    shutil.copy(MARKETPLACE / "models" / "chap_malaria_forecasting.yaml", target)
-    original = target.read_text(encoding="utf-8")
     pin_release = _pin_module()
+    target = _unpinned_copy(tmp_path, pin_release)
+    original = target.read_text(encoding="utf-8")
 
     pin_release.pin(target, COMMIT, MODEL_VERSION, "first release")
     entry = _entry(target)
